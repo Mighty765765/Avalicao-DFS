@@ -56,6 +56,12 @@ const STATUS_COLOR: Record<string, any> = {
   inativo: "default",
 };
 
+interface Manager {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
 export default function ColaboradoresPage() {
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
@@ -72,6 +78,8 @@ export default function ColaboradoresPage() {
   const [newRole, setNewRole] = useState("colaborador");
   const [newPassword, setNewPassword] = useState("");
   const [savePasswordMode, setSavePasswordMode] = useState("generated");
+  const [newManagerId, setNewManagerId] = useState<string | null>(null);
+  const [managers, setManagers] = useState<Manager[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Form Resetar Senha
@@ -130,6 +138,21 @@ export default function ColaboradoresPage() {
     setLoading(false);
   }
 
+  async function loadManagers() {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("role", ["gestor", "admin"])
+      .eq("status", "ativo")
+      .order("full_name");
+    setManagers((data ?? []) as Manager[]);
+  }
+
+  function openNewDialog() {
+    loadManagers();
+    setOpenNew(true);
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -137,6 +160,10 @@ export default function ColaboradoresPage() {
   async function createUser() {
     if (!newEmail || !newName) {
       enqueueSnackbar("Preencha nome e e-mail", { variant: "warning" });
+      return;
+    }
+    if (!newManagerId) {
+      enqueueSnackbar("Selecione um gestor", { variant: "warning" });
       return;
     }
     if (savePasswordMode === "custom" && (!newPassword || newPassword.length < 8)) {
@@ -150,6 +177,7 @@ export default function ColaboradoresPage() {
           email: newEmail,
           full_name: newName,
           role: newRole,
+          manager_id: newManagerId,
           initial_password: savePasswordMode === "custom" ? newPassword : undefined,
           force_password_change: true,
         },
@@ -164,6 +192,7 @@ export default function ColaboradoresPage() {
       setNewName("");
       setNewPassword("");
       setNewRole("colaborador");
+      setNewManagerId(null);
       setSavePasswordMode("generated");
       load();
     } catch (e: any) {
@@ -338,7 +367,7 @@ export default function ColaboradoresPage() {
             <Button
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => setOpenNew(true)}
+              onClick={openNewDialog}
             >
               Novo
             </Button>
@@ -431,6 +460,22 @@ export default function ColaboradoresPage() {
 
             <TextField
               select
+              label="Gestor"
+              value={newManagerId ?? ""}
+              onChange={(e) => setNewManagerId(e.target.value)}
+              fullWidth
+              required
+            >
+              <MenuItem value="">Selecionar gestor...</MenuItem>
+              {managers.map((m) => (
+                <MenuItem key={m.id} value={m.id}>
+                  {m.full_name}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              select
               label="Senha inicial"
               value={savePasswordMode}
               onChange={(e) => {
@@ -460,6 +505,7 @@ export default function ColaboradoresPage() {
             setOpenNew(false);
             setNewPassword("");
             setSavePasswordMode("generated");
+            setNewManagerId(null);
           }}>
             Cancelar
           </Button>
