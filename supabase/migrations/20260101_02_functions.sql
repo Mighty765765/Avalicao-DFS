@@ -3,6 +3,7 @@
 -- ========================================================================
 
 -- Disparo de ciclo: cria self + manager + consensus para cada colaborador ativo
+drop function if exists public.dispatch_cycle(uuid) cascade;
 create or replace function public.dispatch_cycle(cycle uuid)
 returns table (inserted_count int)
 language plpgsql
