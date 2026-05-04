@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug - Logs de Autenticação</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        #logs { background: white; padding: 15px; border-radius: 4px; max-height: 600px; overflow-y: auto; }
+        .log { margin: 5px 0; font-size: 12px; }
+        .error { color: red; }
+        .warn { color: orange; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 10px 5px 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Debug - Logs de Autenticação</h1>
+    <div>
+        <button onclick="capturarLogs()">Capturar Logs</button>
+        <button onclick="limparLogs()">Limpar</button>
+        <button onclick="copiarLogs()">Copiar para Clipboard</button>
+    </div>
+    <div id="logs"></div>
+
+    <script>
+        const logsDiv = document.getElementById('logs');
+        const logs = [];
+
+        // Interceptar console
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+
+        console.log = function(...args) {
+            originalLog(...args);
+            addLog('info', args.join(' '));
+        };
+
+        console.error = function(...args) {
+            originalError(...args);
+            addLog('error', args.join(' '));
+        };
+
+        console.warn = function(...args) {
+            originalWarn(...args);
+            addLog('warn', args.join(' '));
+        };
+
+        function addLog(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logs.push({ type, message, timestamp });
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            logsDiv.innerHTML = logs.map(log =>
+                `<div class="log ${log.type}"><strong>[${log.timestamp}]</strong> ${log.message}</div>`
+            ).join('');
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function limparLogs() {
+            logs.length = 0;
+            logsDiv.innerHTML = '';
+        }
+
+        function capturarLogs() {
+            console.log('=== Iniciando captura de logs ===');
+            console.log('Timestamp:', new Date().toISOString());
+            console.log('URL:', window.location.href);
+        }
+
+        function copiarLogs() {
+            const texto = logs.map(l => `[${l.timestamp}] ${l.message}`).join('\n');
+            navigator.clipboard.writeText(texto).then(() => {
+                alert('Logs copiados para clipboard!');
+            });
+        }
+
+        console.log('Debug page carregada. Abra o app em outra aba e volte aqui para ver os logs.');
+    </script>
+</body>
+</html>
