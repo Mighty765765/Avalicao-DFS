@@ -48,7 +48,7 @@ export default function AvaliarColaboradorPage() {
       if (!evaluationId) return;
       const { data: ev } = await supabase
         .from("evaluations")
-        .select("id, status, type, employee_id, cycle_id, profiles:employee_id(full_name)")
+        .select("id, status, type, evaluee_id, cycle_id, profiles:evaluee_id(full_name)")
         .eq("id", evaluationId)
         .single();
       setEvalRow(ev);

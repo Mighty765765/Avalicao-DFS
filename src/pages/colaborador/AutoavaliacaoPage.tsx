@@ -44,11 +44,14 @@ export default function AutoavaliacaoPage() {
   useEffect(() => {
     (async () => {
       if (!evaluationId) return;
-      const { data: ev } = await supabase
+      const { data: ev, error: evErr } = await supabase
         .from("evaluations")
-        .select("id, status, type, employee_id, cycle_id")
+        .select("id, status, type, evaluee_id, cycle_id")
         .eq("id", evaluationId)
         .single();
+      if (evErr) {
+        console.error("[Autoavaliacao] erro ao carregar:", evErr);
+      }
       setEvalRow(ev);
 
       const { data: qs } = await supabase

@@ -63,7 +63,7 @@ export default function ConsensoPage() {
       const { data: ev } = await supabase
         .from("evaluations")
         .select(
-          "id, status, type, employee_id, cycle_id, profiles:employee_id(full_name)"
+          "id, status, type, evaluee_id, cycle_id, profiles:evaluee_id(full_name)"
         )
         .eq("id", evaluationId)
         .single();
@@ -75,7 +75,7 @@ export default function ConsensoPage() {
         .from("evaluations")
         .select("type, status")
         .eq("cycle_id", ev?.cycle_id)
-        .eq("evaluee_id", ev?.employee_id)
+        .eq("evaluee_id", ev?.evaluee_id)
         .in("type", ["self", "manager"]);
 
       evals?.forEach((e: any) => {
