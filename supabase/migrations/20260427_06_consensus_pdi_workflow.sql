@@ -260,7 +260,6 @@ $$;
 --    Recebe o consensus_eval_id, lista de question_ids selecionadas (>=3),
 --    finaliza o consenso, cria o pdi e popula pdi_points.
 -- ---------------------------------------------------------------------
-drop function if exists public.finalize_consensus(uuid, uuid[]) cascade;
 create or replace function public.finalize_consensus(
   p_eval_id uuid,
   p_selected_questions uuid[]

@@ -3,15 +3,13 @@
 -- ========================================================================
 
 -- Disparo de ciclo: cria self + manager + consensus para cada colaborador ativo
-drop function if exists public.dispatch_cycle(uuid) cascade;
 create or replace function public.dispatch_cycle(cycle uuid)
-returns table (inserted_count int)
+returns void
 language plpgsql
 security definer
 as $$
 declare
   r record;
-  v_inserted int := 0;
 begin
   if not public.is_admin() then
     raise exception 'Acesso negado';
@@ -36,13 +34,9 @@ begin
       values (cycle, r.id, r.manager_id, 'consensus', 'nao_iniciado')
       on conflict do nothing;
     end if;
-
-    v_inserted := v_inserted + 1;
   end loop;
 
   update public.cycles set status = 'aberto_auto_gestor' where id = cycle;
-
-  return query select v_inserted;
 end;
 $$;
 
