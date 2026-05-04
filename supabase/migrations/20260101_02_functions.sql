@@ -4,37 +4,44 @@
 
 -- Disparo de ciclo: cria self + manager + consensus para cada colaborador ativo
 create or replace function public.dispatch_cycle(cycle uuid)
-returns void
+returns table (inserted_count int)
 language plpgsql
 security definer
 as $$
 declare
   r record;
+  v_inserted int := 0;
 begin
   if not public.is_admin() then
     raise exception 'Acesso negado';
   end if;
 
-  for r in (select id, manager_id from public.profiles where status = 'ativo') loop
-    -- Self
+  for r in (select id, manager_id from public.profiles where status = 'ativo' and role in ('colaborador', 'gestor')) loop
+    -- Self (status: em_andamento pois colaborador ainda vai preencher)
     insert into public.evaluations(cycle_id, evaluee_id, evaluator_id, type, status)
-    values (cycle, r.id, r.id, 'self', 'enviado')
+    values (cycle, r.id, r.id, 'self', 'em_andamento')
     on conflict do nothing;
 
-    -- Manager
+    -- Manager (status: nao_iniciado até gestor começar)
     if r.manager_id is not null then
       insert into public.evaluations(cycle_id, evaluee_id, evaluator_id, type, status)
-      values (cycle, r.id, r.manager_id, 'manager', 'enviado')
+      values (cycle, r.id, r.manager_id, 'manager', 'nao_iniciado')
       on conflict do nothing;
     end if;
 
-    -- Consensus (criada com manager como evaluator)
-    insert into public.evaluations(cycle_id, evaluee_id, evaluator_id, type, status)
-    values (cycle, r.id, r.manager_id, 'consensus', 'nao_iniciado')
-    on conflict do nothing;
+    -- Consensus (criada com manager como evaluator, bloqueada até self+manager finalizarem)
+    if r.manager_id is not null then
+      insert into public.evaluations(cycle_id, evaluee_id, evaluator_id, type, status)
+      values (cycle, r.id, r.manager_id, 'consensus', 'nao_iniciado')
+      on conflict do nothing;
+    end if;
+
+    v_inserted := v_inserted + 1;
   end loop;
 
   update public.cycles set status = 'aberto_auto_gestor' where id = cycle;
+
+  return query select v_inserted;
 end;
 $$;
 

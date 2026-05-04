@@ -26,34 +26,40 @@ export default function ColaboradorDashboard() {
   const [actionsTotal, setActionsTotal] = useState(0);
   const [actionsDone, setActionsDone] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [allEvals, setAllEvals] = useState<any[]>([]);
 
   useEffect(() => {
     if (!profile) return;
     (async () => {
-      const [selfEval, pdi] = await Promise.all([
-        supabase
-          .from("evaluations")
-          .select("id")
-          .eq("evaluee_id", profile.id)
-          .eq("type", "self")
-          .neq("status", "finalizado")
-          .maybeSingle(),
-        supabase
-          .from("pdi")
-          .select("id")
-          .eq("employee_id", profile.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-      setOpenSelfEval(selfEval.data?.id ?? null);
-      setHasPdi(!!pdi.data);
+      // Carregar TODAS as avaliações self do colaborador
+      const { data: selfEvals } = await supabase
+        .from("evaluations")
+        .select("id, status, cycle_id, cycles:cycle_id(name)")
+        .eq("evaluee_id", profile.id)
+        .eq("type", "self")
+        .neq("status", "finalizado");
 
-      if (pdi.data) {
+      setAllEvals(selfEvals ?? []);
+
+      // Usar a primeira avaliação aberta disponível
+      const openEval = selfEvals && selfEvals.length > 0 ? selfEvals[0] : null;
+      setOpenSelfEval(openEval?.id ?? null);
+
+      const { data: pdi } = await supabase
+        .from("pdi")
+        .select("id")
+        .eq("employee_id", profile.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setHasPdi(!!pdi);
+
+      if (pdi) {
         const { data: actions } = await supabase
           .from("pdi_actions")
           .select("id, status")
-          .eq("pdi_id", pdi.data.id);
+          .eq("pdi_id", pdi.id);
         setActionsTotal(actions?.length ?? 0);
         setActionsDone(
           actions?.filter((a) => a.status === "finalizada" || a.status === "concluida_colaborador").length ?? 0
@@ -94,8 +100,9 @@ export default function ColaboradorDashboard() {
 
       {!openSelfEval && !hasPdi && !loading && (
         <Alert severity="info" sx={{ mb: 3 }}>
-          Você não tem nenhuma avaliação ou PDI ativo no momento. Quando o RH abrir um novo ciclo, você será
-          avisado por e-mail.
+          {allEvals.length === 0
+            ? "Você não tem nenhuma avaliação aberta no momento. Quando o RH disparar um novo ciclo de avaliação, você será notificado por e-mail."
+            : "Todas as suas avaliações foram finalizadas."}
         </Alert>
       )}
 
