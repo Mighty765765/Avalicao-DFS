@@ -135,7 +135,7 @@ export default function CiclosPage() {
     )
       return;
     try {
-      const { error } = await supabase.rpc("dispatch_cycle", { cycle_id: cycleId });
+      const { error } = await supabase.rpc("dispatch_cycle", { cycle: cycleId });
       if (error) throw error;
       enqueueSnackbar("Ciclo disparado com sucesso", { variant: "success" });
       load();
