@@ -40,6 +40,132 @@ begin
 end;
 $$;
 
+-- Atualizar ciclo (apenas se nenhuma avaliacao preenchida)
+create or replace function public.update_cycle(
+  p_cycle_id uuid,
+  p_name text,
+  p_period_start date,
+  p_period_end date,
+  p_self_manager_start date,
+  p_self_manager_deadline date,
+  p_consolidation_start date default null,
+  p_consolidation_deadline date default null
+)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_count int;
+begin
+  if not public.is_admin() then
+    raise exception 'Acesso negado';
+  end if;
+
+  select count(*) into v_count from public.answers
+   where evaluation_id in (select id from public.evaluations where cycle_id = p_cycle_id);
+
+  if v_count > 0 then
+    raise exception 'Nao e possivel editar ciclo com avaliacoes ja preenchidas';
+  end if;
+
+  update public.cycles
+     set name = p_name,
+         period_start = p_period_start,
+         period_end = p_period_end,
+         self_manager_start = p_self_manager_start,
+         self_manager_deadline = p_self_manager_deadline,
+         consolidation_start = p_consolidation_start,
+         consolidation_deadline = p_consolidation_deadline
+   where id = p_cycle_id;
+end;
+$$;
+
+-- Deletar ciclo (apenas se nenhuma avaliacao preenchida)
+create or replace function public.delete_cycle(p_cycle_id uuid)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_count int;
+begin
+  if not public.is_admin() then
+    raise exception 'Acesso negado';
+  end if;
+
+  select count(*) into v_count from public.answers
+   where evaluation_id in (select id from public.evaluations where cycle_id = p_cycle_id);
+
+  if v_count > 0 then
+    raise exception 'Nao e possivel deletar ciclo com avaliacoes ja preenchidas';
+  end if;
+
+  delete from public.evaluations where cycle_id = p_cycle_id;
+  delete from public.cycles where id = p_cycle_id;
+end;
+$$;
+
+-- Disparar novamente ciclo (atualiza colaboradores novos, mantém os existentes)
+create or replace function public.redispatch_cycle(p_cycle_id uuid)
+returns table (new_evaluations int, existing_evaluations int)
+language plpgsql
+security definer
+as $$
+declare
+  v_new int := 0;
+  v_existing int := 0;
+  r record;
+begin
+  if not public.is_admin() then
+    raise exception 'Acesso negado';
+  end if;
+
+  -- Para cada colaborador/gestor ativo
+  for r in (select id, manager_id from public.profiles
+            where status = 'ativo' and role in ('colaborador', 'gestor')) loop
+
+    -- Verifica se ja tem avaliacao self neste ciclo
+    if exists (select 1 from public.evaluations
+               where cycle_id = p_cycle_id and evaluee_id = r.id and type = 'self') then
+      v_existing := v_existing + 1;
+    else
+      -- Cria nova avaliacao self
+      insert into public.evaluations(cycle_id, evaluee_id, evaluator_id, type, status)
+      values (p_cycle_id, r.id, r.id, 'self', 'em_andamento')
+      on conflict do nothing;
+      v_new := v_new + 1;
+    end if;
+
+    -- Manager (criar ou atualizar)
+    if r.manager_id is not null then
+      if exists (select 1 from public.evaluations
+                 where cycle_id = p_cycle_id and evaluee_id = r.id and type = 'manager') then
+        v_existing := v_existing + 1;
+      else
+        insert into public.evaluations(cycle_id, evaluee_id, evaluator_id, type, status)
+        values (p_cycle_id, r.id, r.manager_id, 'manager', 'nao_iniciado')
+        on conflict do nothing;
+        v_new := v_new + 1;
+      end if;
+
+      -- Consensus
+      if exists (select 1 from public.evaluations
+                 where cycle_id = p_cycle_id and evaluee_id = r.id and type = 'consensus') then
+        v_existing := v_existing + 1;
+      else
+        insert into public.evaluations(cycle_id, evaluee_id, evaluator_id, type, status)
+        values (p_cycle_id, r.id, r.manager_id, 'consensus', 'nao_iniciado')
+        on conflict do nothing;
+        v_new := v_new + 1;
+      end if;
+    end if;
+  end loop;
+
+  return query select v_new, v_existing;
+end;
+$$;
+
 -- ============== VIEWS DE RELATORIO ==============
 create or replace view public.v_evaluation_scores as
 select e.id as evaluation_id,
