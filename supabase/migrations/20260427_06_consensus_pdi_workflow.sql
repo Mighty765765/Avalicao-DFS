@@ -271,6 +271,8 @@ set search_path = public
 as $$
 declare
   v_eval public.evaluations%rowtype;
+  v_self_status text;
+  v_manager_status text;
   v_pdi_id uuid;
   v_q uuid;
   v_pos smallint := 1;
@@ -284,6 +286,27 @@ begin
   if v_eval.type <> 'consensus' then raise exception 'Tipo invalido'; end if;
   if v_eval.evaluator_id <> auth.uid() and not public.is_admin() then
     raise exception 'Apenas o gestor pode fechar o consenso';
+  end if;
+
+  -- Validar que AMBAS (autoavaliacao e avaliacao do gestor) estao finalizadas
+  select status into v_self_status
+    from public.evaluations
+   where cycle_id = v_eval.cycle_id
+     and evaluee_id = v_eval.evaluee_id
+     and type = 'self';
+
+  select status into v_manager_status
+    from public.evaluations
+   where cycle_id = v_eval.cycle_id
+     and evaluee_id = v_eval.evaluee_id
+     and type = 'manager';
+
+  if v_self_status <> 'finalizado' then
+    raise exception 'A autoavaliacao do colaborador ainda nao foi finalizada. Consenso bloqueado.';
+  end if;
+
+  if v_manager_status <> 'finalizado' then
+    raise exception 'A avaliacao do gestor ainda nao foi finalizada. Consenso bloqueado.';
   end if;
 
   update public.evaluations

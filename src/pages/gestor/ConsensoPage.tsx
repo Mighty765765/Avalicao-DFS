@@ -52,6 +52,8 @@ export default function ConsensoPage() {
   >({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [selfStatus, setSelfStatus] = useState<string | null>(null);
+  const [managerStatus, setManagerStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -67,6 +69,19 @@ export default function ConsensoPage() {
         .single();
       setEvalRow(ev);
       setEmployeeName((ev as any)?.profiles?.full_name ?? "");
+
+      // Buscar status das avaliações self e manager
+      const { data: evals } = await supabase
+        .from("evaluations")
+        .select("type, status")
+        .eq("cycle_id", ev?.cycle_id)
+        .eq("evaluee_id", ev?.employee_id)
+        .in("type", ["self", "manager"]);
+
+      evals?.forEach((e: any) => {
+        if (e.type === "self") setSelfStatus(e.status);
+        if (e.type === "manager") setManagerStatus(e.status);
+      });
 
       const { data: side } = await supabase
         .from("v_consensus_side_by_side")
@@ -210,6 +225,21 @@ export default function ConsensoPage() {
         <Alert severity="success" sx={{ mb: 2 }}>
           Consenso ja finalizado. PDI gerado.
         </Alert>
+      )}
+
+      {!finalized && (
+        <>
+          {selfStatus !== "finalizado" && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              ⚠️ <b>Autoavaliação do colaborador não foi finalizada.</b> O consenso só pode ser fechado após a autoavaliação estar completa.
+            </Alert>
+          )}
+          {managerStatus !== "finalizado" && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              ⚠️ <b>Avaliação do gestor não foi finalizada.</b> O consenso só pode ser fechado após a sua avaliação estar completa.
+            </Alert>
+          )}
+        </>
       )}
 
       {!finalized && suggestions.length > 0 && (
@@ -361,7 +391,20 @@ export default function ConsensoPage() {
           <Button
             variant="contained"
             onClick={submitConsenso}
-            disabled={submitting || progress < 100 || selected.size < 3}
+            disabled={
+              submitting ||
+              progress < 100 ||
+              selected.size < 3 ||
+              selfStatus !== "finalizado" ||
+              managerStatus !== "finalizado"
+            }
+            title={
+              selfStatus !== "finalizado"
+                ? "Aguarde a autoavaliação ser finalizada"
+                : managerStatus !== "finalizado"
+                ? "Finalize sua avaliação primeiro"
+                : ""
+            }
           >
             {submitting
               ? "Fechando..."
