@@ -22,7 +22,7 @@ interface Question {
   text: string;
   sort_order: number;
   block_id: string;
-  block_name?: string;
+  block_name: string;
 }
 
 interface AnswerDraft {
@@ -58,7 +58,28 @@ export default function AutoavaliacaoPage() {
         .from("questions")
         .select("id, text, sort_order, block_id")
         .order("sort_order");
-      setQuestions(qs ?? []);
+
+      const { data: blocks, error: blocksErr } = await supabase
+        .from("competency_blocks")
+        .select("id, name");
+
+      console.log("[Autoavaliacao] blocks loaded:", blocks, "error:", blocksErr);
+
+      const blockMap: Record<string, string> = {};
+      (blocks ?? []).forEach((b: any) => {
+        blockMap[b.id] = b.name;
+      });
+
+      console.log("[Autoavaliacao] blockMap:", blockMap);
+
+      const processed = (qs ?? []).map((q: any) => ({
+        id: q.id,
+        text: q.text,
+        sort_order: q.sort_order,
+        block_id: q.block_id,
+        block_name: blockMap[q.block_id] ?? "Sem bloco",
+      }));
+      setQuestions(processed);
 
       const { data: ans } = await supabase
         .from("answers")
@@ -80,7 +101,7 @@ export default function AutoavaliacaoPage() {
   const grouped = useMemo(() => {
     const map: Record<string, Question[]> = {};
     questions.forEach((q) => {
-      const key = q.block_id ?? "outros";
+      const key = q.block_name ?? "Sem bloco";
       (map[key] ||= []).push(q);
     });
     return map;
