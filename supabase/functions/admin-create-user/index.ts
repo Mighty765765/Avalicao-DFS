@@ -6,7 +6,8 @@
 // {
 //   "full_name": "Joao da Silva",
 //   "email": "joao.silva@dfs.com.br",
-//   "role": "colaborador" | "gestor" | "admin",
+//   "role": "colaborador" | "admin",
+//   "is_manager": true | false,        // se tambem atua como gestor
 //   "department_id": "<uuid>" | null,
 //   "position_id":   "<uuid>" | null,
 //   "manager_id":    "<uuid>" | null,
@@ -34,6 +35,16 @@ serve(async (req) => {
       return jsonResponse({ error: "email e full_name obrigatorios" }, 400);
     }
 
+    // Normaliza role para o novo enum (admin | colaborador). Aceita "gestor"
+    // recebido de clientes antigos: vira colaborador + is_manager.
+    let role: "admin" | "colaborador" = "colaborador";
+    let isManager: boolean = !!body.is_manager;
+    if (body.role === "admin") role = "admin";
+    else if (body.role === "gestor") {
+      role = "colaborador";
+      isManager = true;
+    } else if (body.role === "colaborador") role = "colaborador";
+
     // 1. Criar no auth.users com email_confirm = true (uso interno)
     const { data: created, error: createErr } = await client.auth.admin.createUser({
       email: body.email,
@@ -56,7 +67,8 @@ serve(async (req) => {
       .from("profiles")
       .update({
         full_name: body.full_name,
-        role: body.role ?? "colaborador",
+        role,
+        is_manager: isManager,
         department_id: body.department_id ?? null,
         position_id: body.position_id ?? null,
         manager_id: body.manager_id ?? null,

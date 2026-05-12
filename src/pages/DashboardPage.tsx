@@ -4,9 +4,9 @@ import GestorDashboard from "./dashboards/GestorDashboard";
 import ColaboradorDashboard from "./dashboards/ColaboradorDashboard";
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
+  const { activeView } = useAuth();
 
-  if (profile?.role === "admin") return <AdminDashboard />;
-  if (profile?.role === "gestor") return <GestorDashboard />;
+  if (activeView === "admin") return <AdminDashboard />;
+  if (activeView === "gestor") return <GestorDashboard />;
   return <ColaboradorDashboard />;
 }

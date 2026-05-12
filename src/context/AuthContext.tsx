@@ -1,12 +1,35 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode, useRef } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
-import type { Profile } from "../types";
+import type { ActiveView, Profile, ProfileCapabilities } from "../types";
+import { getCapabilities } from "../types";
+
+const ACTIVE_VIEW_STORAGE_PREFIX = "dfs.activeView.";
+
+function defaultViewFor(caps: ProfileCapabilities): ActiveView {
+  if (caps.isAdmin) return "admin";
+  if (caps.isManager) return "gestor";
+  return "colaborador";
+}
+
+function readStoredView(userId: string | undefined, allowed: ActiveView[]): ActiveView | null {
+  if (!userId) return null;
+  try {
+    const v = localStorage.getItem(ACTIVE_VIEW_STORAGE_PREFIX + userId);
+    if (v && (allowed as string[]).includes(v)) return v as ActiveView;
+  } catch {
+    /* localStorage indisponível */
+  }
+  return null;
+}
 
 interface AuthContextValue {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  capabilities: ProfileCapabilities;
+  activeView: ActiveView;
+  setActiveView: (view: ActiveView) => void;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -20,7 +43,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeView, setActiveViewState] = useState<ActiveView>("colaborador");
   const isMountedRef = useRef(true);
+
+  const capabilities = useMemo(() => getCapabilities(profile), [profile]);
+
+  // Sincroniza activeView quando o profile muda: se a view atual não é
+  // permitida pelas capacidades, cai para o default; caso contrário respeita
+  // o valor armazenado em localStorage para o usuário.
+  useEffect(() => {
+    if (!profile) {
+      setActiveViewState("colaborador");
+      return;
+    }
+    const stored = readStoredView(profile.id, capabilities.availableViews);
+    const next = stored ?? defaultViewFor(capabilities);
+    setActiveViewState(next);
+  }, [profile?.id, capabilities.isAdmin, capabilities.isManager]);
+
+  const setActiveView = useCallback((view: ActiveView) => {
+    if (!profile) return;
+    if (!capabilities.availableViews.includes(view)) return;
+    setActiveViewState(view);
+    try {
+      localStorage.setItem(ACTIVE_VIEW_STORAGE_PREFIX + profile.id, view);
+    } catch {
+      /* ignore */
+    }
+  }, [profile?.id, capabilities.availableViews]);
 
   async function loadProfile(userId: string, timeout = 15000) {
     try {
@@ -272,6 +322,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         profile,
         loading,
+        capabilities,
+        activeView,
+        setActiveView,
         signIn,
         signOut,
         refreshProfile,

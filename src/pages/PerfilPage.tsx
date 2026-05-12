@@ -138,11 +138,19 @@ export default function PerfilPage() {
                 <Typography variant="body2" color="text.secondary">
                   Papel:
                 </Typography>
-                <Chip
-                  label={ROLE_LABEL[profile.role] || profile.role}
-                  color={ROLE_COLOR[profile.role]}
-                  size="small"
-                />
+                <Stack direction="row" spacing={0.5}>
+                  <Chip
+                    label={ROLE_LABEL[profile.role] || profile.role}
+                    color={ROLE_COLOR[profile.role]}
+                    size="small"
+                  />
+                  {profile.is_manager && profile.role !== "admin" && (
+                    <Chip label="Gestor" color="secondary" size="small" variant="outlined" />
+                  )}
+                  {profile.is_manager && profile.role === "admin" && (
+                    <Chip label="Gestor" color="secondary" size="small" variant="outlined" />
+                  )}
+                </Stack>
               </Stack>
               <Alert severity="info" sx={{ fontSize: 13 }}>
                 Para alterar nome, e-mail ou papel, fale com o RH (Administração).

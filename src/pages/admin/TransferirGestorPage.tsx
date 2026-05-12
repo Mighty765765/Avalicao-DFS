@@ -54,8 +54,8 @@ export default function TransferirGestorPage() {
       }
       const { data: list } = await supabase
         .from("profiles")
-        .select("id, full_name, email, role, manager_id")
-        .in("role", ["gestor", "admin"])
+        .select("id, full_name, email, role, is_manager, manager_id")
+        .or("is_manager.eq.true,role.eq.admin")
         .eq("status", "ativo")
         .order("full_name");
       setManagers((list ?? []).filter((m: any) => m.id !== id) as ProfileLite[]);

@@ -17,6 +17,7 @@ import {
   Typography,
   Switch,
   FormControlLabel,
+  Checkbox,
 } from "@mui/material";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
@@ -33,6 +34,7 @@ interface Row {
   full_name: string;
   email: string;
   role: string;
+  is_manager: boolean;
   status: string;
   department_name: string | null;
   position_name: string | null;
@@ -41,15 +43,18 @@ interface Row {
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Administrador",
-  gestor: "Gestor",
   colaborador: "Colaborador",
 };
 
 const ROLE_COLOR: Record<string, any> = {
   admin: "primary",
-  gestor: "secondary",
   colaborador: "default",
 };
+
+function describeRole(row: { role: string; is_manager: boolean }): string {
+  if (row.role === "admin") return row.is_manager ? "Admin + Gestor" : "Administrador";
+  return row.is_manager ? "Colaborador + Gestor" : "Colaborador";
+}
 
 const STATUS_COLOR: Record<string, any> = {
   ativo: "success",
@@ -60,6 +65,8 @@ interface Manager {
   id: string;
   full_name: string;
   email: string;
+  role: string;
+  is_manager: boolean;
 }
 
 export default function ColaboradoresPage() {
@@ -75,11 +82,13 @@ export default function ColaboradoresPage() {
   // Form Novo
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
-  const [newRole, setNewRole] = useState("colaborador");
+  const [newRole, setNewRole] = useState<"colaborador" | "admin">("colaborador");
+  const [newIsManager, setNewIsManager] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [savePasswordMode, setSavePasswordMode] = useState("generated");
   const [newManagerId, setNewManagerId] = useState<string | null>(null);
   const [managers, setManagers] = useState<Manager[]>([]);
+  const [loadingManagers, setLoadingManagers] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Form Resetar Senha
@@ -95,7 +104,7 @@ export default function ColaboradoresPage() {
     const { data, error } = await supabase
       .from("profiles")
       .select(`
-        id, full_name, email, role, status, manager_id,
+        id, full_name, email, role, is_manager, status, manager_id,
         department:departments(name),
         position:positions(name)
       `)
@@ -129,6 +138,7 @@ export default function ColaboradoresPage() {
         full_name: p.full_name,
         email: p.email,
         role: p.role,
+        is_manager: !!p.is_manager,
         status: p.status,
         department_name: p.department?.name ?? null,
         position_name: p.position?.name ?? null,
@@ -139,13 +149,20 @@ export default function ColaboradoresPage() {
   }
 
   async function loadManagers() {
-    const { data } = await supabase
+    setLoadingManagers(true);
+    // Quem pode ser gestor: usuários com is_manager=true OU role='admin'.
+    const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, email")
-      .in("role", ["gestor", "admin"])
+      .select("id, full_name, email, role, is_manager")
+      .or("is_manager.eq.true,role.eq.admin")
       .eq("status", "ativo")
       .order("full_name");
+    if (error) {
+      console.error("[loadManagers] erro:", error);
+      enqueueSnackbar(`Erro ao carregar gestores: ${error.message}`, { variant: "error" });
+    }
     setManagers((data ?? []) as Manager[]);
+    setLoadingManagers(false);
   }
 
   function openNewDialog() {
@@ -155,6 +172,7 @@ export default function ColaboradoresPage() {
 
   useEffect(() => {
     load();
+    loadManagers();
   }, []);
 
   async function createUser() {
@@ -177,6 +195,7 @@ export default function ColaboradoresPage() {
           email: newEmail,
           full_name: newName,
           role: newRole,
+          is_manager: newIsManager,
           manager_id: newManagerId,
           initial_password: savePasswordMode === "custom" ? newPassword : undefined,
           force_password_change: true,
@@ -192,6 +211,7 @@ export default function ColaboradoresPage() {
       setNewName("");
       setNewPassword("");
       setNewRole("colaborador");
+      setNewIsManager(false);
       setNewManagerId(null);
       setSavePasswordMode("generated");
       load();
@@ -259,7 +279,13 @@ export default function ColaboradoresPage() {
 
   const filtered = rows.filter((r) => {
     if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
-    if (roleFilter !== "ALL" && r.role !== roleFilter) return false;
+    if (roleFilter !== "ALL") {
+      if (roleFilter === "gestor") {
+        if (!r.is_manager) return false;
+      } else if (r.role !== roleFilter) {
+        return false;
+      }
+    }
     if (search) {
       const s = search.toLowerCase();
       return (
@@ -278,14 +304,26 @@ export default function ColaboradoresPage() {
     {
       field: "role",
       headerName: "Papel",
-      width: 140,
-      renderCell: (p) => (
-        <Chip
-          size="small"
-          color={ROLE_COLOR[p.value as string] ?? "default"}
-          label={ROLE_LABEL[p.value as string] ?? p.value}
-        />
-      ),
+      width: 200,
+      renderCell: (p) => {
+        const row = p.row as Row;
+        return (
+          <Stack direction="row" spacing={0.5}>
+            <Chip
+              size="small"
+              color={ROLE_COLOR[row.role] ?? "default"}
+              label={ROLE_LABEL[row.role] ?? row.role}
+            />
+            {row.is_manager && row.role !== "admin" && (
+              <Chip size="small" color="secondary" label="Gestor" variant="outlined" />
+            )}
+            {row.is_manager && row.role === "admin" && (
+              <Chip size="small" color="secondary" label="Gestor" variant="outlined" />
+            )}
+          </Stack>
+        );
+      },
+      valueGetter: (_v, row) => describeRole(row as Row),
     },
     { field: "department_name", headerName: "Área", width: 160 },
     { field: "position_name", headerName: "Cargo", width: 160 },
@@ -386,8 +424,8 @@ export default function ColaboradoresPage() {
             sx={{ minWidth: 160 }}
           >
             <MenuItem value="ALL">Todos</MenuItem>
-            <MenuItem value="admin">Administrador</MenuItem>
-            <MenuItem value="gestor">Gestor</MenuItem>
+            <MenuItem value="admin">Administrador (RH)</MenuItem>
+            <MenuItem value="gestor">Gestor (qualquer)</MenuItem>
             <MenuItem value="colaborador">Colaborador</MenuItem>
           </TextField>
           <TextField
@@ -450,13 +488,29 @@ export default function ColaboradoresPage() {
               select
               label="Papel"
               value={newRole}
-              onChange={(e) => setNewRole(e.target.value)}
+              onChange={(e) => setNewRole(e.target.value as "colaborador" | "admin")}
               fullWidth
+              helperText="Administrador = RH (acessa toda configuração). Para criar um Gestor, marque a opção abaixo."
             >
               <MenuItem value="colaborador">Colaborador</MenuItem>
-              <MenuItem value="gestor">Gestor</MenuItem>
               <MenuItem value="admin">Administrador (RH)</MenuItem>
             </TextField>
+
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={newIsManager}
+                  onChange={(e) => setNewIsManager(e.target.checked)}
+                />
+              }
+              label="Também atua como Gestor (terá visão de equipe e poderá avaliar subordinados)"
+            />
+            {newIsManager && (
+              <Typography variant="caption" color="text.secondary" sx={{ ml: 4, mt: -1 }}>
+                O usuário poderá alternar entre as visões “Colaborador” e “Gestor” no menu lateral.
+                Ele também participa do fluxo de auto-avaliação e consenso normalmente.
+              </Typography>
+            )}
 
             <TextField
               select
@@ -465,11 +519,20 @@ export default function ColaboradoresPage() {
               onChange={(e) => setNewManagerId(e.target.value)}
               fullWidth
               required
+              helperText={
+                loadingManagers
+                  ? "Carregando gestores..."
+                  : managers.length === 0
+                    ? "Nenhum gestor/admin ativo cadastrado. Crie um Administrador ou Gestor primeiro."
+                    : "Obrigatório — usado também para auto-avaliação e consenso quando o papel for Gestor."
+              }
             >
-              <MenuItem value="">Selecionar gestor...</MenuItem>
+              <MenuItem value="" disabled>
+                {loadingManagers ? "Carregando..." : "Selecionar gestor..."}
+              </MenuItem>
               {managers.map((m) => (
                 <MenuItem key={m.id} value={m.id}>
-                  {m.full_name}
+                  {m.full_name} ({describeRole(m)})
                 </MenuItem>
               ))}
             </TextField>

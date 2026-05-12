@@ -17,6 +17,10 @@ import {
   MenuItem,
   Divider,
   Container,
+  Select,
+  FormControl,
+  InputLabel,
+  Chip,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
@@ -37,6 +41,13 @@ import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import type { ActiveView } from "../types";
+
+const VIEW_LABEL: Record<ActiveView, string> = {
+  colaborador: "Colaborador",
+  gestor: "Gestor",
+  admin: "Administrador (RH)",
+};
 
 const DRAWER_WIDTH = 270;
 
@@ -56,7 +67,7 @@ export default function AppLayout() {
   const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, activeView, setActiveView, capabilities } = useAuth();
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -89,89 +100,65 @@ export default function AppLayout() {
     })();
   }, [profile?.id]);
 
-  const isAdmin = profile?.role === "admin";
-  const isGestor = profile?.role === "gestor" || isAdmin;
-
   const groups: MenuGroup[] = [];
 
-  // Bloco "Eu" (todos)
-  const euItems: MenuItemDef[] = [
-    { label: "Início", path: "/app/inicio", icon: <DashboardIcon /> },
-  ];
-  if (hasOpenSelfEval) {
+  // O menu reflete a VISÃO ATIVA. Capacidades determinam quais visões estão
+  // disponíveis no seletor; a visão escolhida dita os grupos exibidos.
+  if (activeView === "colaborador") {
+    const euItems: MenuItemDef[] = [
+      { label: "Início", path: "/app/inicio", icon: <DashboardIcon /> },
+    ];
+    if (hasOpenSelfEval) {
+      euItems.push({
+        label: "Minha Avaliação",
+        path: `/app/colaborador/avaliacoes/${hasOpenSelfEval}`,
+        icon: <RateReviewIcon />,
+      });
+    }
+    if (hasActivePdi) {
+      euItems.push({
+        label: "Meu PDI",
+        path: "/app/colaborador/pdi",
+        icon: <AssignmentIcon />,
+      });
+    }
     euItems.push({
-      label: "Minha Avaliação",
-      path: `/app/colaborador/avaliacoes/${hasOpenSelfEval}`,
-      icon: <RateReviewIcon />,
+      label: "Histórico",
+      path: "/app/colaborador/historico",
+      icon: <HistoryIcon />,
     });
+    groups.push({ title: "Eu", items: euItems });
   }
-  if (hasActivePdi) {
-    euItems.push({
-      label: "Meu PDI",
-      path: "/app/colaborador/pdi",
-      icon: <AssignmentIcon />,
-    });
-  }
-  euItems.push({
-    label: "Histórico",
-    path: "/app/colaborador/historico",
-    icon: <HistoryIcon />,
-  });
-  groups.push({ title: "Eu", items: euItems });
 
-  // Bloco "Equipe" (gestor + admin)
-  if (isGestor) {
+  if (activeView === "gestor") {
     groups.push({
       title: "Equipe",
       items: [
+        { label: "Início", path: "/app/inicio", icon: <DashboardIcon /> },
         { label: "Minha Equipe", path: "/app/gestor/equipe", icon: <GroupIcon /> },
-        {
-          label: "Validar Ações",
-          path: "/app/gestor/pdi/validar",
-          icon: <ChecklistIcon />,
-        },
-        {
-          label: "Histórico da Equipe",
-          path: "/app/gestor/historico",
-          icon: <ManageHistoryIcon />,
-        },
+        { label: "Validar Ações", path: "/app/gestor/pdi/validar", icon: <ChecklistIcon /> },
+        { label: "Histórico da Equipe", path: "/app/gestor/historico", icon: <ManageHistoryIcon /> },
       ],
     });
   }
 
-  // Bloco "Administração RH"
-  if (isAdmin) {
+  if (activeView === "admin") {
     groups.push({
       title: "Administração RH",
       items: [
+        { label: "Início", path: "/app/inicio", icon: <DashboardIcon /> },
         { label: "Ciclos", path: "/app/admin/ciclos", icon: <EventNoteIcon /> },
-        {
-          label: "Colaboradores",
-          path: "/app/admin/colaboradores",
-          icon: <PeopleIcon />,
-        },
-        {
-          label: "Avaliações",
-          path: "/app/admin/avaliacoes",
-          icon: <DescriptionIcon />,
-        },
+        { label: "Colaboradores", path: "/app/admin/colaboradores", icon: <PeopleIcon /> },
+        { label: "Avaliações", path: "/app/admin/avaliacoes", icon: <DescriptionIcon /> },
         { label: "PDI", path: "/app/admin/pdi", icon: <AssignmentIcon /> },
-        {
-          label: "Ações Pendentes",
-          path: "/app/admin/acoes-pendentes",
-          icon: <RuleIcon />,
-        },
+        { label: "Ações Pendentes", path: "/app/admin/acoes-pendentes", icon: <RuleIcon /> },
         { label: "Auditoria", path: "/app/admin/auditoria", icon: <HistoryIcon /> },
-        {
-          label: "Configurações",
-          path: "/app/admin/configuracoes",
-          icon: <SettingsIcon />,
-        },
+        { label: "Configurações", path: "/app/admin/configuracoes", icon: <SettingsIcon /> },
       ],
     });
   }
 
-  // Footer
+  // Footer comum
   groups.push({
     items: [
       { label: "Meu perfil", path: "/app/perfil", icon: <AccountCircleIcon /> },
@@ -205,11 +192,6 @@ export default function AppLayout() {
     .join("")
     .toUpperCase();
 
-  const roleLabel: Record<string, string> = {
-    admin: "Administrador (RH)",
-    gestor: "Gestor",
-    colaborador: "Colaborador",
-  };
 
   const drawerContent = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -221,6 +203,34 @@ export default function AppLayout() {
           sx={{ height: 150, objectFit: "contain" }}
         />
       </Toolbar>
+      <Divider />
+      {capabilities.availableViews.length > 1 && (
+        <Box sx={{ px: 2, py: 1.5 }}>
+          <FormControl size="small" fullWidth>
+            <InputLabel id="view-select-label">Atuando como</InputLabel>
+            <Select
+              labelId="view-select-label"
+              label="Atuando como"
+              value={activeView}
+              onChange={(e) => {
+                const next = e.target.value as ActiveView;
+                setActiveView(next);
+                navigate("/app/inicio");
+                if (isMobile) setMobileOpen(false);
+              }}
+            >
+              {capabilities.availableViews.map((v) => (
+                <MenuItem key={v} value={v}>{VIEW_LABEL[v]}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+      )}
+      {capabilities.availableViews.length === 1 && (
+        <Box sx={{ px: 2, py: 1 }}>
+          <Chip label={VIEW_LABEL[activeView]} size="small" sx={{ width: "100%" }} />
+        </Box>
+      )}
       <Divider />
       <Box sx={{ flex: 1, overflowY: "auto", py: 1 }}>
         {groups.map((group, gIdx) => (
@@ -316,7 +326,7 @@ export default function AppLayout() {
                 {profile?.full_name || profile?.email}
               </Typography>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                {roleLabel[profile?.role || ""] || profile?.role}
+                {VIEW_LABEL[activeView]}
               </Typography>
             </Box>
             <IconButton onClick={(e) => setAnchorEl(e.currentTarget)}>
